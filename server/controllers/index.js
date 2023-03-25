@@ -249,53 +249,31 @@ const notFound = (req, res) => {
   });
 };
 
+// sets a dog in the collection
 const setDogName = async (req, res) => {
+  // ensure that all of the necessary components are there
   if (!req.body.firstname || !req.body.lastname || !req.body.breed || !req.body.age) {
     return res.status(400).json({ error: 'firstname, lastname, breed, and age are all required' });
   }
 
+  // set up the dog data
   const dogData = {
     name: `${req.body.firstname} ${req.body.lastname}`,
     breed: `${req.body.breed}`,
     age: req.body.age,
   };
 
-  /* Once we have our cat object set up. We want to turn it into something the database
-     can understand. To do this, we create a new instance of a Cat using the Cat model
-     exported from the Models folder.
-
-     Note that this does NOT store the cat in the database. That is the next step.
-  */
+  // save the new dog in the system
   const newDog = new Dog(dogData);
-
-  /* We have now setup a cat in the right format. We now want to store it in the database.
-     Again, because the database and node server are separate things entirely we have no
-     way of being sure the database will work or respond. Because of that, we wrap our code
-     in a try/catch.
-  */
   try {
-    /* newCat is a version of our catData that is database-friendly. If you print it, you will
-       see it has extra information attached to it other than name and bedsOwned. One thing it
-       now has is a .save() function. This function will intelligently add or update the cat in
-       the database. Since we have never saved this cat before, .save() will create a new cat in
-       the database. All calls to the database are async, including .save() so we will await the
-       databases response. If something goes wrong, we will end up in our catch() statement.
-    */
     await newDog.save();
+  // or return an error if it fails
   } catch (err) {
-    /* If something goes wrong while communicating with the database, log the error and send
-       an error message back to the client. Note that our return will return us from the setName
-       function, not just the catch statement. That means we can treat the code below the catch
-       as being our "if the try worked"
-    */
     console.log(err);
     return res.status(500).json({ error: 'failed to create dog' });
   }
 
-  /* After our await has resolved, and if no errors have occured during the await, we will end
-     up here. We will update our lastAdded cat to the one we just added. We will then send that
-     cat's data to the client.
-  */
+  // set the dog to be the last dog added and return it to the user
   lastDogAdded = newDog;
   return res.json({
     name: lastDogAdded.name,
@@ -304,55 +282,56 @@ const setDogName = async (req, res) => {
   });
 };
 
-const searchDogName = (req, res) => {
+// get a dog and update it's age
+const updateAge = async (req, res) => {
+  // require a name to be sent in
+  if (!req.body.name) {
+    return res.status(400).json({ error: 'Name is required to perform a search' });
+  }
 
-};
-
-const updateAge = (req, res) => {
-
-};
-
-const hostPage4 = async (req, res) => {
-  /* Remember that our database is an entirely separate server from our node
-     code. That means all interactions with it are async, and just because our
-     server is up doesn't mean our database is. Therefore, any time we
-     interact with it, we need to account for scenarios where it is not working.
-     That is why the code below is wrapped in a try/catch statement.
-  */
+  // get a dog with the matching name (because name is unique, there is only one match)
+  let doc;
   try {
-    /* We want to find all the cats in the Cat database. To do this, we need
-       to make a "query" or a search. Queries in Mongoose are "thenable" which
-       means they work like promises. Since they work like promises, we can also
-       use await/async with them.
-
-       The result of any query will either throw an error, or return zero, one, or
-       multiple "documents". Documents are what our database stores. It is often
-       abbreviated to "doc" or "docs" (one or multiple).
-
-       .find() is a function in all Mongoose models (like our Cat model). It takes
-       in an object as a parameter that defines the search. In this case, we want
-       to find every cat, so we give it an empty object because that will not filter
-       out any cats.
-
-       .lean() is a modifier for the find query. Instead of returning entire mongoose
-       documents, .lean() will only return the JS Objects being stored. Try printing
-       out docs with and without .lean() to see the difference.
-
-       .exec() executes the chain of operations. It is not strictly necessary and
-       can be removed. However, mongoose gives better error messages if we use it.
-    */
-    const docs = await Dog.find({}).lean().exec();
-
-    // Once we get back the docs array, we can send it to page1.
-    return res.render('page4', { dogs: docs });
+    doc = await Dog.findOne({ name: req.body.name }).exec();
+  // if that fails, return the error to the user
   } catch (err) {
-    /* If our database returns an error, or is unresponsive, we will print that error to
-       our console for us to see. We will also send back an error message to the client.
+    console.log(err);
+    return res.status(500).json({ error: 'Something went wrong' });
+  }
 
-       We don't want to send back the err from mongoose, as that would be unsafe. You
-       do not want people to see actual error messages from your server or database, or else
-       they can exploit them to attack your server.
-    */
+  // If we do not find something that matches our search, doc will be empty.
+  if (!doc) {
+    return res.json({ error: 'No dogs found' });
+  }
+
+  // increase the age of the dog and save it
+  doc.age++;
+  const savePromise = doc.save();
+
+  // If we successfully save/update them in the database, send back the dog's info.
+  savePromise.then(() => res.json({
+    name: doc.name,
+    breed: doc.breed,
+    age: doc.age,
+  }));
+
+  // If something goes wrong saving to the database, log the error and send a message to the client.
+  savePromise.catch((err) => {
+    console.log(err);
+    return res.status(500).json({ error: 'Something went wrong' });
+  });
+
+  return true;
+};
+
+// host the page with all the dogs
+const hostPage4 = async (req, res) => {
+  // render all the dogs in a list
+  try {
+    const docs = await Dog.find({}).lean().exec();
+    return res.render('page4', { dogs: docs });
+  // if that fails, throw an error
+  } catch (err) {
     console.log(err);
     return res.status(500).json({ error: 'failed to find dogs' });
   }
@@ -371,6 +350,5 @@ module.exports = {
   updateLast,
   updateAge,
   searchCatName,
-  searchDogName,
   notFound,
 };
